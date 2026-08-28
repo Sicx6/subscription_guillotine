@@ -7,6 +7,10 @@ import 'insights_view.dart';
 import 'settings_view.dart';
 import 'subscription.dart';
 import 'subscription_providers.dart';
+import 'subscription_detail_sheet.dart';
+import 'reminders_screen.dart';
+
+enum DashboardSort { nextBilling, category }
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -18,6 +22,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   int _tab = 0;
   String _query = '';
+  DashboardSort _sort = DashboardSort.nextBilling;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +38,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         actions: _tab == 0
             ? [
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    final items = subscriptions.value ?? const <Subscription>[];
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => RemindersScreen(
+                          items: items,
+                          onOpenSettings: () {
+                            if (mounted) setState(() => _tab = 2);
+                          },
+                        ),
+                      ),
+                    );
+                  },
                   tooltip: 'Notifications',
                   icon: const Icon(Icons.notifications_none),
                 ),
@@ -54,6 +71,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               items: items,
               query: _query,
               onQueryChanged: (value) => setState(() => _query = value),
+              sort: _sort,
+              onSortChanged: (value) => setState(() => _sort = value),
               onRefresh: () => ref.refresh(subscriptionsProvider.future),
             ),
             InsightsView(items: items),
@@ -101,32 +120,61 @@ class _HomeView extends StatelessWidget {
     required this.query,
     required this.onQueryChanged,
     required this.onRefresh,
+    required this.sort,
+    required this.onSortChanged,
   });
 
   final List<Subscription> items;
   final String query;
   final ValueChanged<String> onQueryChanged;
   final Future<void> Function() onRefresh;
+  final DashboardSort sort;
+  final ValueChanged<DashboardSort> onSortChanged;
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final upcoming = items.toList()
+    final active = items
+        .where((item) => item.status != SubscriptionStatus.cancelled)
+        .toList();
+    final cancelled = items
+        .where((item) => item.status == SubscriptionStatus.cancelled)
+        .toList();
+    final upcoming = active.toList()
       ..sort(
         (a, b) => a.nextBillingDate(today).compareTo(b.nextBillingDate(today)),
       );
     final next = upcoming.isEmpty ? null : upcoming.first;
-    final filtered = items
+    final filtered = active
         .where((item) => item.name.toLowerCase().contains(query.toLowerCase()))
-        .toList();
+        .toList()
+      ..sort(sort == DashboardSort.category
+          ? (a, b) {
+              final category = a.category.label.compareTo(b.category.label);
+              return category != 0 ? category : a.name.compareTo(b.name);
+            }
+          : (a, b) =>
+              a.nextBillingDate(today).compareTo(b.nextBillingDate(today)));
 
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
         children: [
-          _MonthlySummary(items: items),
+          _MonthlySummary(items: active, cancelled: cancelled),
+          ...active.where((item) {
+            final days = item.trialEndDate?.difference(today).inDays;
+            return days != null && days >= 0 && days <= 7;
+          }).map((item) => Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Card(
+                    child: ListTile(
+                  leading: const Icon(Icons.hourglass_bottom),
+                  title: Text('${item.name} trial ends soon'),
+                  subtitle: Text(_date(item.trialEndDate!)),
+                )),
+              )),
           const SizedBox(height: 24),
           TextField(
             onChanged: onQueryChanged,
@@ -150,24 +198,79 @@ class _HomeView extends StatelessWidget {
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   )),
+              const SizedBox(width: 4),
+              PopupMenuButton<DashboardSort>(
+                initialValue: sort,
+                tooltip: 'Sort subscriptions',
+                icon: const Icon(Icons.sort),
+                onSelected: onSortChanged,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: DashboardSort.nextBilling,
+                    child: Text('Sort by next billing'),
+                  ),
+                  PopupMenuItem(
+                    value: DashboardSort.category,
+                    child: Text('Sort by category'),
+                  ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 10),
-          if (items.isEmpty)
+          if (active.isEmpty && cancelled.isEmpty)
             const _EmptyState()
           else if (filtered.isEmpty)
             const _NoSearchResults()
           else
-            ...filtered.map((item) => _SubscriptionRow(item: item)),
+            ..._subscriptionRows(filtered, sort),
+          if (cancelled.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const _SectionLabel('CANCELLED'),
+            ...cancelled.map((item) => _SubscriptionRow(item: item)),
+          ],
         ],
       ),
     );
   }
 }
 
+List<Widget> _subscriptionRows(
+  List<Subscription> items,
+  DashboardSort sort,
+) {
+  if (sort == DashboardSort.nextBilling) {
+    return items.map((item) => _SubscriptionRow(item: item)).toList();
+  }
+
+  final rows = <Widget>[];
+  for (final category in SubscriptionCategory.values) {
+    final categoryItems = items
+        .where((subscription) => subscription.category == category)
+        .toList();
+    if (categoryItems.isEmpty) continue;
+    rows.add(
+      Padding(
+        padding: const EdgeInsets.only(top: 12, bottom: 4),
+        child: Row(
+          children: [
+            Expanded(child: _SectionLabel(category.label.toUpperCase())),
+            Text('${categoryItems.length}'),
+          ],
+        ),
+      ),
+    );
+    rows.addAll(
+      categoryItems.map((item) => _SubscriptionRow(item: item)),
+    );
+  }
+  return rows;
+}
+
 class _MonthlySummary extends StatelessWidget {
-  const _MonthlySummary({required this.items});
+  const _MonthlySummary({required this.items, required this.cancelled});
   final List<Subscription> items;
+  final List<Subscription> cancelled;
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +282,8 @@ class _MonthlySummary extends StatelessWidget {
       return days >= 0 && days <= 7;
     });
     final dueSoon = soon.fold<double>(0, (sum, item) => sum + item.price);
+    final savings =
+        cancelled.fold<double>(0, (sum, item) => sum + item.monthlyPrice);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,6 +299,14 @@ class _MonthlySummary extends StatelessWidget {
           style:
               TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
+        if (savings > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('MYR ${savings.toStringAsFixed(2)} saved each month',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w700)),
+          ),
         const SizedBox(height: 10),
         Text(
           '${items.length} active  ·  MYR ${dueSoon.toStringAsFixed(2)} due in 7 days',
@@ -316,6 +429,11 @@ class _SubscriptionRow extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: ListTile(
+        onTap: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            useSafeArea: true,
+            builder: (_) => SubscriptionDetailSheet(subscription: item)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
         leading: _ServiceAvatar(name: item.name),
         title: Text(item.name,

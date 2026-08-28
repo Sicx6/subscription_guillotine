@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../subscriptions/subscription_providers.dart';
 import '../subscriptions/subscription.dart';
 import 'receipt_scanner_service.dart';
+import '../../services/attachment_service.dart';
 
 class ConfirmationScreen extends ConsumerStatefulWidget {
   const ConfirmationScreen({super.key, required this.result});
@@ -23,6 +24,8 @@ class _ConfirmationScreenState extends ConsumerState<ConfirmationScreen> {
   late final TextEditingController _date;
   Recurrence _recurrence = Recurrence.monthly;
   int _reminderDaysBefore = 1;
+  SubscriptionCategory _category = SubscriptionCategory.other;
+  final _trialDate = TextEditingController();
   bool _saving = false;
 
   @override
@@ -36,6 +39,8 @@ class _ConfirmationScreenState extends ConsumerState<ConfirmationScreen> {
     _date = TextEditingController(
       text: draft.billingDate == null ? '' : _formatDate(draft.billingDate!),
     );
+    _recurrence = draft.suggestedRecurrence ?? Recurrence.monthly;
+    _category = draft.suggestedCategory ?? SubscriptionCategory.other;
   }
 
   String _formatDate(DateTime date) =>
@@ -58,12 +63,19 @@ class _ConfirmationScreenState extends ConsumerState<ConfirmationScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
+      final receiptPath =
+          await AttachmentService.preserve(widget.result.imagePath, 'receipt');
       await ref.read(subscriptionsProvider.notifier).add(
             name: _name.text,
             price: double.parse(_price.text),
             billingDate: _parseDate(_date.text)!,
             recurrence: _recurrence,
             reminderDaysBefore: _reminderDaysBefore,
+            category: _category,
+            trialEndDate: _trialDate.text.trim().isEmpty
+                ? null
+                : _parseDate(_trialDate.text),
+            receiptPath: receiptPath,
           );
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
@@ -81,6 +93,7 @@ class _ConfirmationScreenState extends ConsumerState<ConfirmationScreen> {
     _name.dispose();
     _price.dispose();
     _date.dispose();
+    _trialDate.dispose();
     super.dispose();
   }
 
@@ -110,6 +123,15 @@ class _ConfirmationScreenState extends ConsumerState<ConfirmationScreen> {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
+          if (widget.result.draft.signals.isNotEmpty) ...[
+            Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.result.draft.signals
+                    .map((signal) => Chip(label: Text(signal)))
+                    .toList()),
+            const SizedBox(height: 16),
+          ],
           if (widget.result.draft.serviceName == null ||
               widget.result.draft.price == null ||
               widget.result.draft.billingDate == null) ...[
@@ -213,6 +235,35 @@ class _ConfirmationScreenState extends ConsumerState<ConfirmationScreen> {
                       : (value) => setState(
                             () => _reminderDaysBefore = value ?? 1,
                           ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<SubscriptionCategory>(
+                  value: _category,
+                  decoration: const InputDecoration(
+                      labelText: 'Category',
+                      prefixIcon: Icon(Icons.category_outlined)),
+                  items: SubscriptionCategory.values
+                      .map((value) => DropdownMenuItem(
+                          value: value, child: Text(value.label)))
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() =>
+                          _category = value ?? SubscriptionCategory.other),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _trialDate,
+                  keyboardType: TextInputType.datetime,
+                  decoration: const InputDecoration(
+                      labelText: 'Trial ends (optional)',
+                      hintText: 'DD/MM/YYYY',
+                      prefixIcon: Icon(Icons.hourglass_bottom)),
+                  validator: (value) => value == null ||
+                          value.trim().isEmpty ||
+                          _parseDate(value) != null
+                      ? null
+                      : 'Use DD/MM/YYYY',
                 ),
               ],
             ),

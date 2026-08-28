@@ -20,7 +20,15 @@ class _EditSubscriptionDialogState
   late final TextEditingController _name;
   late final TextEditingController _price;
   late final TextEditingController _date;
+  late final TextEditingController _trialDate;
+  late final TextEditingController _cancelUrl;
+  late final TextEditingController _cancelReference;
+  late final TextEditingController _cancelNotes;
   late Recurrence _recurrence;
+  late SubscriptionCategory _category;
+  late SubscriptionStatus _status;
+  late bool _isEssential;
+  late UsageLevel _usageLevel;
   late int _reminderDaysBefore;
   bool _saving = false;
 
@@ -34,7 +42,23 @@ class _EditSubscriptionDialogState
     _date = TextEditingController(
         text: _formatDate(widget.subscription.billingDate));
     _recurrence = widget.subscription.recurrence;
+    _category = widget.subscription.category;
+    _status = widget.subscription.status;
+    _isEssential = widget.subscription.isEssential;
+    _usageLevel = widget.subscription.usageLevel;
     _reminderDaysBefore = widget.subscription.reminderDaysBefore;
+    _trialDate = TextEditingController(
+      text: widget.subscription.trialEndDate == null
+          ? ''
+          : _formatDate(widget.subscription.trialEndDate!),
+    );
+    _cancelUrl =
+        TextEditingController(text: widget.subscription.cancellationUrl ?? '');
+    _cancelReference = TextEditingController(
+      text: widget.subscription.cancellationReference ?? '',
+    );
+    _cancelNotes = TextEditingController(
+        text: widget.subscription.cancellationNotes ?? '');
   }
 
   String _formatDate(DateTime date) =>
@@ -64,6 +88,19 @@ class _EditSubscriptionDialogState
             billingDate: _parseDate(_date.text)!,
             recurrence: _recurrence,
             reminderDaysBefore: _reminderDaysBefore,
+            category: _category,
+            status: _status,
+            trialEndDate: _trialDate.text.trim().isEmpty
+                ? null
+                : _parseDate(_trialDate.text),
+            cancellationDate: _status == SubscriptionStatus.cancelled
+                ? widget.subscription.cancellationDate ?? DateTime.now()
+                : null,
+            cancellationReference: _cancelReference.text.trim(),
+            cancellationUrl: _cancelUrl.text.trim(),
+            cancellationNotes: _cancelNotes.text.trim(),
+            isEssential: _isEssential,
+            usageLevel: _usageLevel,
           );
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
@@ -80,6 +117,10 @@ class _EditSubscriptionDialogState
     _name.dispose();
     _price.dispose();
     _date.dispose();
+    _trialDate.dispose();
+    _cancelUrl.dispose();
+    _cancelReference.dispose();
+    _cancelNotes.dispose();
     super.dispose();
   }
 
@@ -165,6 +206,93 @@ class _EditSubscriptionDialogState
                       : (value) => setState(
                             () => _reminderDaysBefore = value ?? 1,
                           ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<SubscriptionCategory>(
+                  value: _category,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items: SubscriptionCategory.values
+                      .map((value) => DropdownMenuItem(
+                          value: value, child: Text(value.label)))
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() =>
+                          _category = value ?? SubscriptionCategory.other),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _trialDate,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                      labelText: 'Trial ends (optional)',
+                      hintText: 'DD/MM/YYYY'),
+                  validator: (value) => value == null ||
+                          value.trim().isEmpty ||
+                          _parseDate(value) != null
+                      ? null
+                      : 'Use DD/MM/YYYY',
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<SubscriptionStatus>(
+                  value: _status,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: SubscriptionStatus.values
+                      .map((value) => DropdownMenuItem(
+                          value: value, child: Text(value.label)))
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(
+                          () => _status = value ?? SubscriptionStatus.active),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Essential subscription'),
+                  subtitle: const Text('Reduces its Guillotine Score'),
+                  value: _isEssential,
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => _isEssential = value),
+                ),
+                DropdownButtonFormField<UsageLevel>(
+                  value: _usageLevel,
+                  decoration:
+                      const InputDecoration(labelText: 'How often used'),
+                  items: UsageLevel.values
+                      .map((value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value.label),
+                          ))
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(
+                            () => _usageLevel = value ?? UsageLevel.unknown,
+                          ),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _cancelUrl,
+                  enabled: !_saving,
+                  keyboardType: TextInputType.url,
+                  decoration:
+                      const InputDecoration(labelText: 'Cancellation URL'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _cancelReference,
+                  enabled: !_saving,
+                  decoration: const InputDecoration(
+                      labelText: 'Cancellation reference'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _cancelNotes,
+                  enabled: !_saving,
+                  maxLines: 3,
+                  decoration:
+                      const InputDecoration(labelText: 'Cancellation notes'),
                 ),
               ],
             ),

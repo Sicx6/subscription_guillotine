@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:gravity="center_vertical"
+    android:padding="16dp" android:background="#FF25346B">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="SUBSCRIPTION GUILLOTINE" android:textColor="#BFFFFFFF"
+        android:textSize="11sp" android:textStyle="bold" />
+    <TextView android:id="@+id/widget_total" android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:layout_marginTop="8dp"
+        android:text="MYR 0.00 / month" android:textColor="#FFFFFFFF"
+        android:textSize="22sp" android:textStyle="bold" />
+    <TextView android:id="@+id/widget_count" android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:text="0 active"
+        android:textColor="#DFFFFFFF" android:textSize="13sp" />
+    <TextView android:id="@+id/widget_next" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:layout_marginTop="10dp"
+        android:maxLines="1" android:ellipsize="end" android:text="No upcoming charges"
+        android:textColor="#FFFFFFFF" android:textSize="13sp" />
+</LinearLayout>

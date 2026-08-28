@@ -11,8 +11,10 @@ class SubscriptionRepository {
     final path = p.join(await getDatabasesPath(), 'subscription_guillotine.db');
     _database = await openDatabase(
       path,
-      version: 2,
-      onCreate: (db, _) => db.execute('''
+      version: 4,
+      onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+      onCreate: (db, _) async {
+        await db.execute('''
         CREATE TABLE subscriptions(
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -21,9 +23,16 @@ class SubscriptionRepository {
           recurrence TEXT NOT NULL DEFAULT 'monthly',
           reminder_days_before INTEGER NOT NULL DEFAULT 1,
           notification_id INTEGER NOT NULL,
+          category TEXT NOT NULL DEFAULT 'other', status TEXT NOT NULL DEFAULT 'active',
+          trial_end_date TEXT, cancellation_date TEXT, cancellation_reference TEXT,
+          cancellation_url TEXT, cancellation_notes TEXT, receipt_path TEXT, proof_path TEXT,
+          is_essential INTEGER NOT NULL DEFAULT 0,
+          usage_level TEXT NOT NULL DEFAULT 'unknown',
           created_at TEXT NOT NULL
         )
-      '''),
+      ''');
+        await _createEventsTable(db);
+      },
       onUpgrade: (db, oldVersion, _) async {
         if (oldVersion < 2) {
           await db.execute(
@@ -45,6 +54,29 @@ class SubscriptionRepository {
               whereArgs: [id],
             );
           }
+        }
+        if (oldVersion < 3) {
+          const columns = [
+            "category TEXT NOT NULL DEFAULT 'other'",
+            "status TEXT NOT NULL DEFAULT 'active'",
+            'trial_end_date TEXT',
+            'cancellation_date TEXT',
+            'cancellation_reference TEXT',
+            'cancellation_url TEXT',
+            'cancellation_notes TEXT',
+            'receipt_path TEXT',
+            'proof_path TEXT'
+          ];
+          for (final column in columns) {
+            await db.execute('ALTER TABLE subscriptions ADD COLUMN $column');
+          }
+          await _createEventsTable(db);
+        }
+        if (oldVersion < 4) {
+          await db.execute(
+              'ALTER TABLE subscriptions ADD COLUMN is_essential INTEGER NOT NULL DEFAULT 0');
+          await db.execute(
+              "ALTER TABLE subscriptions ADD COLUMN usage_level TEXT NOT NULL DEFAULT 'unknown'");
         }
       },
     );
@@ -89,4 +121,48 @@ class SubscriptionRepository {
       throw StateError('Subscription $id was not found.');
     }
   }
+
+  Future<void> addEvent(SubscriptionEvent event) async =>
+      (await _db).insert('subscription_events', event.toMap()..remove('id'));
+
+  Future<List<SubscriptionEvent>> getEvents(String subscriptionId) async =>
+      (await (await _db).query('subscription_events',
+              where: 'subscription_id = ?',
+              whereArgs: [subscriptionId],
+              orderBy: 'occurred_at DESC'))
+          .map(SubscriptionEvent.fromMap)
+          .toList();
+
+  Future<Map<String, Object?>> exportData() async => {
+        'version': 1,
+        'subscriptions': await (await _db).query('subscriptions'),
+        'events': await (await _db).query('subscription_events'),
+      };
+
+  Future<void> importData(Map<String, dynamic> data) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      for (final raw in (data['subscriptions'] as List? ?? const [])) {
+        await txn.insert('subscriptions', Map<String, Object?>.from(raw as Map),
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      for (final raw in (data['events'] as List? ?? const [])) {
+        await txn.insert(
+            'subscription_events', Map<String, Object?>.from(raw as Map),
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
+  }
 }
+
+Future<void> _createEventsTable(Database db) => db.execute('''
+  CREATE TABLE IF NOT EXISTS subscription_events(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscription_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    amount REAL,
+    occurred_at TEXT NOT NULL,
+    note TEXT,
+    FOREIGN KEY(subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE
+  )
+''');

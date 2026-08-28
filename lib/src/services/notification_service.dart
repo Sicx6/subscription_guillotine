@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/subscriptions/subscription.dart';
 
@@ -50,8 +51,11 @@ class NotificationService {
   Future<void> schedule(Subscription subscription) async {
     await initialize();
     await cancel(subscription.notificationId);
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('notifications_enabled') ?? true)) return;
 
-    final scheduledLocal = _nextReminderDate(subscription);
+    final hour = prefs.getInt('reminder_hour') ?? 9;
+    final scheduledLocal = _nextReminderDate(subscription, hour);
     final scheduled = tz.TZDateTime.from(scheduledLocal, tz.local);
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
@@ -76,24 +80,62 @@ class NotificationService {
       matchDateTimeComponents: _matchComponents(subscription.recurrence),
       payload: subscription.id,
     );
+    if (subscription.trialEndDate != null) {
+      final trialReminder = DateTime(
+        subscription.trialEndDate!.year,
+        subscription.trialEndDate!.month,
+        subscription.trialEndDate!.day,
+        hour,
+      ).subtract(const Duration(days: 3));
+      if (trialReminder.isAfter(DateTime.now())) {
+        await _plugin.zonedSchedule(
+          subscription.notificationId ^ 0x40000000,
+          '${subscription.name} trial ends soon',
+          'Your free trial ends in 3 days.',
+          tz.TZDateTime.from(trialReminder, tz.local),
+          details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+          payload: subscription.id,
+        );
+      }
+    }
+  }
+
+  Future<void> showTest() async {
+    await initialize();
+    await _plugin.show(
+        2147483000,
+        'Reminders are ready',
+        'Subscription Guillotine can notify you before the next charge.',
+        const NotificationDetails(
+            android: AndroidNotificationDetails(
+                'subscription_reminders', 'Subscription reminders',
+                channelDescription:
+                    'Reminders before recurring subscription charges',
+                importance: Importance.high,
+                priority: Priority.high),
+            iOS: DarwinNotificationDetails()));
   }
 
   Future<void> cancel(int notificationId) async {
     await initialize();
     await _plugin.cancel(notificationId);
+    await _plugin.cancel(notificationId ^ 0x40000000);
   }
 
-  DateTime _nextReminderDate(Subscription subscription) {
+  DateTime _nextReminderDate(Subscription subscription, int hour) {
     var billing = subscription.billingDate;
     final now = DateTime.now();
-    var reminder = DateTime(billing.year, billing.month, billing.day, 9)
+    var reminder = DateTime(billing.year, billing.month, billing.day, hour)
         .subtract(Duration(days: subscription.reminderDaysBefore));
     while (!reminder.isAfter(now)) {
       billing = subscription.recurrence.nextDate(
         billing,
         preferredDay: subscription.billingDate.day,
       );
-      reminder = DateTime(billing.year, billing.month, billing.day, 9)
+      reminder = DateTime(billing.year, billing.month, billing.day, hour)
           .subtract(Duration(days: subscription.reminderDaysBefore));
     }
     return reminder;
