@@ -4,6 +4,7 @@ import 'subscription.dart';
 import 'subscription_repository.dart';
 import '../../services/notification_service.dart';
 import '../../services/home_widget_service.dart';
+import '../../services/attachment_service.dart';
 
 final subscriptionRepositoryProvider = Provider<SubscriptionRepository>(
   (_) => SubscriptionRepository(),
@@ -147,20 +148,30 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     }
   }
 
-  Future<void> logPayment(Subscription subscription) async {
+  Future<void> logPayment(
+    Subscription subscription, {
+    required double amount,
+    required DateTime paidAt,
+    required String billingPeriod,
+    String? note,
+    String? receiptPath,
+  }) async {
     await ref.read(subscriptionRepositoryProvider).addEvent(SubscriptionEvent(
           id: null,
           subscriptionId: subscription.id,
           type: 'payment',
-          amount: subscription.price,
-          occurredAt: DateTime.now(),
-          note: subscription.recurrence.label,
+          amount: amount,
+          occurredAt: paidAt,
+          note: note,
+          billingPeriod: billingPeriod,
+          receiptPath: receiptPath,
         ));
   }
 
   Future<void> delete(String id) async {
     final repository = ref.read(subscriptionRepositoryProvider);
     final existing = await repository.getAll();
+    final events = await repository.getEvents(id);
     var notificationId = id.hashCode & 0x7fffffff;
     for (final subscription in existing) {
       if (subscription.id == id) {
@@ -169,6 +180,9 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
       }
     }
     await repository.delete(id);
+    for (final event in events) {
+      await AttachmentService.deleteIfExists(event.receiptPath);
+    }
     state = AsyncData(await repository.getAll());
     await HomeWidgetService.update(state.value!);
     try {

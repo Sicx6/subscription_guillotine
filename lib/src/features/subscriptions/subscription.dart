@@ -198,13 +198,17 @@ class SubscriptionEvent {
       required this.type,
       required this.amount,
       required this.occurredAt,
-      this.note});
+      this.note,
+      this.billingPeriod,
+      this.receiptPath});
   final int? id;
   final String subscriptionId;
   final String type;
   final double? amount;
   final DateTime occurredAt;
   final String? note;
+  final String? billingPeriod;
+  final String? receiptPath;
   factory SubscriptionEvent.fromMap(Map<String, Object?> map) =>
       SubscriptionEvent(
           id: map['id'] as int?,
@@ -212,13 +216,17 @@ class SubscriptionEvent {
           type: map['type']! as String,
           amount: (map['amount'] as num?)?.toDouble(),
           occurredAt: DateTime.parse(map['occurred_at']! as String),
-          note: map['note'] as String?);
+          note: map['note'] as String?,
+          billingPeriod: map['billing_period'] as String?,
+          receiptPath: map['receipt_path'] as String?);
   Map<String, Object?> toMap() => {
         'id': id,
         'subscription_id': subscriptionId,
         'type': type,
         'amount': amount,
         'occurred_at': occurredAt.toIso8601String(),
-        'note': note
+        'note': note,
+        'billing_period': billingPeriod,
+        'receipt_path': receiptPath,
       };
 }

@@ -11,7 +11,7 @@ class SubscriptionRepository {
     final path = p.join(await getDatabasesPath(), 'subscription_guillotine.db');
     _database = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, _) async {
         await db.execute('''
@@ -78,6 +78,12 @@ class SubscriptionRepository {
           await db.execute(
               "ALTER TABLE subscriptions ADD COLUMN usage_level TEXT NOT NULL DEFAULT 'unknown'");
         }
+        if (oldVersion < 5) {
+          await db.execute(
+              'ALTER TABLE subscription_events ADD COLUMN billing_period TEXT');
+          await db.execute(
+              'ALTER TABLE subscription_events ADD COLUMN receipt_path TEXT');
+        }
       },
     );
     return _database!;
@@ -125,6 +131,16 @@ class SubscriptionRepository {
   Future<void> addEvent(SubscriptionEvent event) async =>
       (await _db).insert('subscription_events', event.toMap()..remove('id'));
 
+  Future<SubscriptionEvent?> deleteEvent(int id) async {
+    final db = await _db;
+    final rows = await db.query('subscription_events',
+        where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) return null;
+    final event = SubscriptionEvent.fromMap(rows.first);
+    await db.delete('subscription_events', where: 'id = ?', whereArgs: [id]);
+    return event;
+  }
+
   Future<List<SubscriptionEvent>> getEvents(String subscriptionId) async =>
       (await (await _db).query('subscription_events',
               where: 'subscription_id = ?',
@@ -163,6 +179,8 @@ Future<void> _createEventsTable(Database db) => db.execute('''
     amount REAL,
     occurred_at TEXT NOT NULL,
     note TEXT,
+    billing_period TEXT,
+    receipt_path TEXT,
     FOREIGN KEY(subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE
   )
 ''');

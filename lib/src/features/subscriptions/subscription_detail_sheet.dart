@@ -8,6 +8,7 @@ import '../../services/attachment_service.dart';
 import 'subscription.dart';
 import 'subscription_providers.dart';
 import 'decision_engine.dart';
+import 'log_payment_dialog.dart';
 
 class SubscriptionDetailSheet extends ConsumerStatefulWidget {
   const SubscriptionDetailSheet({super.key, required this.subscription});
@@ -29,10 +30,66 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
       .getEvents(widget.subscription.id);
 
   Future<void> _logPayment() async {
-    await ref
-        .read(subscriptionsProvider.notifier)
-        .logPayment(widget.subscription);
-    setState(_reload);
+    final draft = await showDialog<PaymentDraft>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => LogPaymentDialog(subscription: widget.subscription));
+    if (draft == null) return;
+    final receiptPath = await AttachmentService.preserve(
+        draft.imagePath, 'payment_${widget.subscription.id}',
+        folderName: 'payment_receipts');
+    await ref.read(subscriptionsProvider.notifier).logPayment(
+        widget.subscription,
+        amount: draft.amount,
+        paidAt: draft.paidAt,
+        billingPeriod: draft.billingPeriod,
+        note: draft.note,
+        receiptPath: receiptPath);
+    if (mounted) {
+      setState(_reload);
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Payment and receipt saved.')));
+    }
+  }
+
+  Future<void> _deleteEvent(SubscriptionEvent event) async {
+    if (event.id == null) return;
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+                title: const Text('Delete payment?'),
+                content: const Text(
+                    'The payment record and its receipt will be removed from this device.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Keep')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Delete'))
+                ]));
+    if (confirmed != true) return;
+    final removed =
+        await ref.read(subscriptionRepositoryProvider).deleteEvent(event.id!);
+    await AttachmentService.deleteIfExists(removed?.receiptPath);
+    if (mounted) setState(_reload);
+  }
+
+  Future<void> _openReceipt(String path) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Receipt file is unavailable.')));
+      }
+      return;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+        context: context,
+        builder: (_) => Dialog(
+            child: InteractiveViewer(
+                child: Image.file(file, fit: BoxFit.contain))));
   }
 
   Future<void> _proof() async {
@@ -58,9 +115,10 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
         proofPath: path,
         isEssential: s.isEssential,
         usageLevel: s.usageLevel);
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cancellation proof attached.')));
+    }
   }
 
   @override
@@ -135,9 +193,10 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                       FilledButton.tonalIcon(
                           onPressed: () async {
                             final uri = Uri.tryParse(s.cancellationUrl!);
-                            if (uri != null)
+                            if (uri != null) {
                               await launchUrl(uri,
                                   mode: LaunchMode.externalApplication);
+                            }
                           },
                           icon: const Icon(Icons.open_in_new),
                           label: const Text('Cancel online')),
@@ -146,11 +205,12 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                           await Clipboard.setData(ClipboardData(
                               text:
                                   'Please cancel my ${s.name} subscription and confirm the effective cancellation date.'));
-                          if (mounted)
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                     content:
                                         Text('Cancellation message copied.')));
+                          }
                         },
                         icon: const Icon(Icons.copy),
                         label: const Text('Copy message')),
@@ -179,25 +239,49 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                           return const Center(
                               child: CircularProgressIndicator());
                         }
-                        if (events.isEmpty)
+                        if (events.isEmpty) {
                           return const Text('No activity recorded yet.');
+                        }
                         return Column(
                             children: events
                                 .map((event) => ListTile(
+                                    onTap: event.receiptPath == null
+                                        ? null
+                                        : () =>
+                                            _openReceipt(event.receiptPath!),
                                     contentPadding: EdgeInsets.zero,
                                     leading: Icon(event.type == 'payment'
                                         ? Icons.payments_outlined
                                         : event.type == 'price_change'
                                             ? Icons.trending_up
                                             : Icons.flag_outlined),
-                                    title:
-                                        Text(event.type.replaceAll('_', ' ')),
-                                    subtitle: Text(
-                                        event.note ?? _date(event.occurredAt)),
-                                    trailing: event.amount == null
-                                        ? null
-                                        : Text(
-                                            'MYR ${event.amount!.toStringAsFixed(2)}')))
+                                    title: Text(event.billingPeriod ??
+                                        event.type.replaceAll('_', ' ')),
+                                    subtitle: Text([
+                                      _date(event.occurredAt),
+                                      if ((event.note ?? '').isNotEmpty)
+                                        event.note!,
+                                    ].join(' · ')),
+                                    trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (event.receiptPath != null)
+                                            const Icon(
+                                                Icons.receipt_long_outlined),
+                                          if (event.amount != null)
+                                            Padding(
+                                                padding: const EdgeInsets.only(
+                                                    left: 8),
+                                                child: Text(
+                                                    'MYR ${event.amount!.toStringAsFixed(2)}')),
+                                          if (event.type == 'payment')
+                                            IconButton(
+                                                tooltip: 'Delete payment',
+                                                onPressed: () =>
+                                                    _deleteEvent(event),
+                                                icon: const Icon(
+                                                    Icons.delete_outline)),
+                                        ])))
                                 .toList());
                       }),
                 ]));

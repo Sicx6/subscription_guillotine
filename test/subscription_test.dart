@@ -60,4 +60,23 @@ void main() {
       DateTime(2025, 3, 31),
     );
   });
+
+  test('payment event preserves billing period and receipt path', () {
+    final event = SubscriptionEvent(
+      id: 7,
+      subscriptionId: 'subscription-1',
+      type: 'payment',
+      amount: 54.90,
+      occurredAt: DateTime(2026, 9, 21),
+      note: 'Paid by card',
+      billingPeriod: 'September 2026',
+      receiptPath: r'C:\app\attachments\payment_receipts\receipt.jpg',
+    );
+
+    final restored = SubscriptionEvent.fromMap(event.toMap());
+
+    expect(restored.billingPeriod, 'September 2026');
+    expect(restored.receiptPath, event.receiptPath);
+    expect(restored.amount, 54.90);
+  });
 }
