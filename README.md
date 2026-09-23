@@ -7,6 +7,31 @@ payments and evaluating their effect on a personal budget. It combines on-device
 receipt recognition, renewal reminders, spending insights, cancellation tools,
 and explainable recommendations without requiring an account or cloud service.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><strong>Dashboard</strong></td>
+    <td align="center"><strong>Insights</strong></td>
+    <td align="center"><strong>Subscription details</strong></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-38-37-749_com.example.subscription_guillotine.jpg" width="260" alt="Subscription Guillotine dashboard"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-38-42-548_com.example.subscription_guillotine.jpg" width="260" alt="Subscription spending insights"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-39-28-802_com.example.subscription_guillotine.jpg" width="260" alt="Subscription details with cancellation deadline and price timeline"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Receipt scanning</strong></td>
+    <td align="center"><strong>Payment logging</strong></td>
+    <td align="center"><strong>Guillotine Mode</strong></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-39-08-071_com.example.subscription_guillotine.jpg" width="260" alt="On-device receipt scanner"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-39-32-613_com.example.subscription_guillotine.jpg" width="260" alt="Monthly payment logging dialog"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-38-54-041_com.example.subscription_guillotine.jpg" width="260" alt="Guillotine Mode subscription decision screen"></td>
+  </tr>
+</table>
+
 ## Highlights
 
 ### Subscription tracking
