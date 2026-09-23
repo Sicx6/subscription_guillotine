@@ -87,6 +87,7 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
     String? proofPath,
     required bool isEssential,
     required UsageLevel usageLevel,
+    int? cancellationLeadDays,
   }) async {
     final repository = ref.read(subscriptionRepositoryProvider);
     final updated = Subscription(
@@ -109,6 +110,8 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
       proofPath: proofPath ?? subscription.proofPath,
       isEssential: isEssential,
       usageLevel: usageLevel,
+      cancellationLeadDays:
+          cancellationLeadDays ?? subscription.cancellationLeadDays,
     );
     if (subscription.price != price) {
       await repository.addEvent(SubscriptionEvent(
@@ -145,6 +148,54 @@ class SubscriptionsNotifier extends AsyncNotifier<List<Subscription>> {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<void> updatePrice(Subscription subscription, double price) async {
+    final repository = ref.read(subscriptionRepositoryProvider);
+    await repository.addEvent(SubscriptionEvent(
+      id: null,
+      subscriptionId: subscription.id,
+      type: 'price_change',
+      amount: price,
+      occurredAt: DateTime.now(),
+      note:
+          'Accepted receipt price; previously MYR ${subscription.price.toStringAsFixed(2)}',
+    ));
+    final updated = subscription.copyWith(price: price);
+    await repository.update(updated);
+    await _refreshAndSchedule(updated);
+  }
+
+  Future<void> recordCheckIn(
+    Subscription subscription, {
+    required UsageLevel usage,
+    required bool worthPrice,
+    required bool subscribeAgain,
+  }) async {
+    final repository = ref.read(subscriptionRepositoryProvider);
+    await repository.update(subscription.copyWith(usageLevel: usage));
+    await repository.addEvent(SubscriptionEvent(
+      id: null,
+      subscriptionId: subscription.id,
+      type: 'check_in',
+      amount: null,
+      occurredAt: DateTime.now(),
+      note:
+          '${usage.label} use · ${worthPrice ? 'Worth the price' : 'Not worth the price'} · ${subscribeAgain ? 'Would subscribe again' : 'Would not subscribe again'}',
+    ));
+    state = AsyncData(await repository.getAll());
+    await HomeWidgetService.update(state.value!);
+  }
+
+  Future<void> _refreshAndSchedule(Subscription subscription) async {
+    final repository = ref.read(subscriptionRepositoryProvider);
+    state = AsyncData(await repository.getAll());
+    await HomeWidgetService.update(state.value!);
+    try {
+      await ref.read(notificationServiceProvider).schedule(subscription);
+    } catch (_) {
+      // The local update remains valid even when notifications are unavailable.
     }
   }
 

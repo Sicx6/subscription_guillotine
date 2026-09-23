@@ -30,6 +30,7 @@ class _EditSubscriptionDialogState
   late bool _isEssential;
   late UsageLevel _usageLevel;
   late int _reminderDaysBefore;
+  late int _cancellationLeadDays;
   bool _saving = false;
 
   @override
@@ -47,6 +48,7 @@ class _EditSubscriptionDialogState
     _isEssential = widget.subscription.isEssential;
     _usageLevel = widget.subscription.usageLevel;
     _reminderDaysBefore = widget.subscription.reminderDaysBefore;
+    _cancellationLeadDays = widget.subscription.cancellationLeadDays;
     _trialDate = TextEditingController(
       text: widget.subscription.trialEndDate == null
           ? ''
@@ -101,6 +103,7 @@ class _EditSubscriptionDialogState
             cancellationNotes: _cancelNotes.text.trim(),
             isEssential: _isEssential,
             usageLevel: _usageLevel,
+            cancellationLeadDays: _cancellationLeadDays,
           );
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
@@ -205,6 +208,27 @@ class _EditSubscriptionDialogState
                       ? null
                       : (value) => setState(
                             () => _reminderDaysBefore = value ?? 1,
+                          ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  value: _cancellationLeadDays,
+                  decoration: const InputDecoration(
+                    labelText: 'Cancel at least',
+                    helperText: 'Last safe cancellation deadline',
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('On renewal day')),
+                    DropdownMenuItem(value: 1, child: Text('1 day before')),
+                    DropdownMenuItem(value: 3, child: Text('3 days before')),
+                    DropdownMenuItem(value: 7, child: Text('7 days before')),
+                    DropdownMenuItem(value: 14, child: Text('14 days before')),
+                    DropdownMenuItem(value: 30, child: Text('30 days before')),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(
+                            () => _cancellationLeadDays = value ?? 3,
                           ),
                 ),
                 const SizedBox(height: 12),

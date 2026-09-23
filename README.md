@@ -15,6 +15,7 @@ and explainable recommendations without requiring an account or cloud service.
 - Categories, trial dates, renewal reminders, and permanent receipt attachments
 - Active, planning-to-cancel, cancellation-requested, and cancelled states
 - Payment, price-change, and status history
+- Monthly payment receipts with offline charge auditing and duplicate detection
 - Search and dashboard sorting by next billing date or category
 
 ### Receipt intelligence
@@ -24,6 +25,8 @@ and explainable recommendations without requiring an account or cloud service.
 - Suggested merchant, price, billing date, recurrence, and category
 - Detection of trial, recurring-payment, discount, and tax wording
 - Editable confirmation form when OCR results are missing or inaccurate
+- Receipt-to-subscription checks for price and merchant mismatches
+- Explainable price-change alerts with an option to accept a verified new price
 
 ### Financial decision tools
 
@@ -37,6 +40,8 @@ and explainable recommendations without requiring an account or cloud service.
 - Focused Guillotine Mode for Keep, Later, or Cut decisions
 - Monthly subscription health report
 - One-year and five-year cost projections
+- Renewal value check-ins that refresh the usage signal used by the score
+- Per-subscription price-creep timeline and annual impact
 
 ### Cancellation and savings
 
@@ -44,6 +49,8 @@ and explainable recommendations without requiring an account or cloud service.
 - Prepared cancellation message that can be copied
 - Cancelled-subscription history and monthly savings calculation
 - Direct access to supported cancellation websites
+- Configurable last-safe cancellation deadlines and local alerts
+- Multi-entry cancellation evidence vault for screenshots and references
 
 ### Reminders and widgets
 
@@ -70,7 +77,7 @@ CSV exports.
 ## Technology
 
 - Flutter and Material 3
-- Riverpod `AsyncNotifier`
+- Riverpod ViewModels (`AsyncNotifier` and `StateNotifier`)
 - `sqflite`
 - `google_mlkit_text_recognition`
 - `flutter_local_notifications` and `timezone`

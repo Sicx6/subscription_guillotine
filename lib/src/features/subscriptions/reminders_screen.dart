@@ -25,6 +25,8 @@ class RemindersScreen extends StatelessWidget {
       );
     final trials = active.where((item) => item.trialEndDate != null).toList()
       ..sort((a, b) => a.trialEndDate!.compareTo(b.trialEndDate!));
+    final deadlines = [...active]
+      ..sort((a, b) => _deadline(a, today).compareTo(_deadline(b, today)));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Reminders')),
@@ -50,6 +52,17 @@ class RemindersScreen extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 24),
+          const _SectionTitle('CANCELLATION DEADLINES'),
+          const SizedBox(height: 8),
+          ...deadlines.take(5).map(
+                (item) => _ReminderTile(
+                  item: item,
+                  date: _deadline(item, today),
+                  icon: Icons.event_busy_outlined,
+                  label: 'Last safe day to cancel',
+                ),
+              ),
           const SizedBox(height: 24),
           const _SectionTitle('RENEWALS'),
           const SizedBox(height: 8),
@@ -83,6 +96,10 @@ class RemindersScreen extends StatelessWidget {
       ),
     );
   }
+
+  DateTime _deadline(Subscription item, DateTime today) => item
+      .nextBillingDate(today)
+      .subtract(Duration(days: item.cancellationLeadDays));
 }
 
 class _ReminderTile extends StatelessWidget {

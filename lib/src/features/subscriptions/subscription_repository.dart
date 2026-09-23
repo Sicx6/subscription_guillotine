@@ -11,7 +11,7 @@ class SubscriptionRepository {
     final path = p.join(await getDatabasesPath(), 'subscription_guillotine.db');
     _database = await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: (db, _) async {
         await db.execute('''
@@ -28,6 +28,7 @@ class SubscriptionRepository {
           cancellation_url TEXT, cancellation_notes TEXT, receipt_path TEXT, proof_path TEXT,
           is_essential INTEGER NOT NULL DEFAULT 0,
           usage_level TEXT NOT NULL DEFAULT 'unknown',
+          cancellation_lead_days INTEGER NOT NULL DEFAULT 3,
           created_at TEXT NOT NULL
         )
       ''');
@@ -78,11 +79,25 @@ class SubscriptionRepository {
           await db.execute(
               "ALTER TABLE subscriptions ADD COLUMN usage_level TEXT NOT NULL DEFAULT 'unknown'");
         }
-        if (oldVersion < 5) {
+        if (oldVersion >= 3 && oldVersion < 5) {
           await db.execute(
               'ALTER TABLE subscription_events ADD COLUMN billing_period TEXT');
           await db.execute(
               'ALTER TABLE subscription_events ADD COLUMN receipt_path TEXT');
+        }
+        if (oldVersion < 6) {
+          await db.execute(
+              'ALTER TABLE subscriptions ADD COLUMN cancellation_lead_days INTEGER NOT NULL DEFAULT 3');
+          if (oldVersion >= 3) {
+            await db.execute(
+                'ALTER TABLE subscription_events ADD COLUMN audit_status TEXT');
+            await db.execute(
+                'ALTER TABLE subscription_events ADD COLUMN audit_message TEXT');
+            await db.execute(
+                'ALTER TABLE subscription_events ADD COLUMN detected_merchant TEXT');
+            await db.execute(
+                'ALTER TABLE subscription_events ADD COLUMN expected_amount REAL');
+          }
         }
       },
     );
@@ -128,8 +143,21 @@ class SubscriptionRepository {
     }
   }
 
-  Future<void> addEvent(SubscriptionEvent event) async =>
+  Future<int> addEvent(SubscriptionEvent event) async =>
       (await _db).insert('subscription_events', event.toMap()..remove('id'));
+
+  Future<void> updateEventAudit(
+    int id, {
+    required String status,
+    String? message,
+  }) async {
+    await (await _db).update(
+      'subscription_events',
+      {'audit_status': status, 'audit_message': message},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
 
   Future<SubscriptionEvent?> deleteEvent(int id) async {
     final db = await _db;
@@ -181,6 +209,10 @@ Future<void> _createEventsTable(Database db) => db.execute('''
     note TEXT,
     billing_period TEXT,
     receipt_path TEXT,
+    audit_status TEXT,
+    audit_message TEXT,
+    detected_merchant TEXT,
+    expected_amount REAL,
     FOREIGN KEY(subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE
   )
 ''');

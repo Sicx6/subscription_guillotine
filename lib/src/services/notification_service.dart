@@ -80,6 +80,19 @@ class NotificationService {
       matchDateTimeComponents: _matchComponents(subscription.recurrence),
       payload: subscription.id,
     );
+    final cancellationDeadline = _nextCancellationDeadline(subscription, hour);
+    await _plugin.zonedSchedule(
+      subscription.notificationId ^ 0x20000000,
+      'Last safe day to cancel ${subscription.name}',
+      'Cancel today to avoid the next MYR ${subscription.price.toStringAsFixed(2)} charge.',
+      tz.TZDateTime.from(cancellationDeadline, tz.local),
+      details,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: _matchComponents(subscription.recurrence),
+      payload: subscription.id,
+    );
     if (subscription.trialEndDate != null) {
       final trialReminder = DateTime(
         subscription.trialEndDate!.year,
@@ -123,6 +136,7 @@ class NotificationService {
     await initialize();
     await _plugin.cancel(notificationId);
     await _plugin.cancel(notificationId ^ 0x40000000);
+    await _plugin.cancel(notificationId ^ 0x20000000);
   }
 
   DateTime _nextReminderDate(Subscription subscription, int hour) {
@@ -139,6 +153,22 @@ class NotificationService {
           .subtract(Duration(days: subscription.reminderDaysBefore));
     }
     return reminder;
+  }
+
+  DateTime _nextCancellationDeadline(Subscription subscription, int hour) {
+    var billing = subscription.billingDate;
+    final now = DateTime.now();
+    var deadline = DateTime(billing.year, billing.month, billing.day, hour)
+        .subtract(Duration(days: subscription.cancellationLeadDays));
+    while (!deadline.isAfter(now)) {
+      billing = subscription.recurrence.nextDate(
+        billing,
+        preferredDay: subscription.billingDate.day,
+      );
+      deadline = DateTime(billing.year, billing.month, billing.day, hour)
+          .subtract(Duration(days: subscription.cancellationLeadDays));
+    }
+    return deadline;
   }
 
   DateTimeComponents _matchComponents(Recurrence recurrence) {

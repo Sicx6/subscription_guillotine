@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../scan/receipt_scanner_service.dart';
 import 'subscription.dart';
 
 class PaymentDraft {
@@ -11,12 +12,16 @@ class PaymentDraft {
       required this.paidAt,
       required this.billingPeriod,
       required this.note,
-      required this.imagePath});
+      required this.imagePath,
+      this.detectedAmount,
+      this.detectedMerchant});
   final double amount;
   final DateTime paidAt;
   final String billingPeriod;
   final String? note;
   final String imagePath;
+  final double? detectedAmount;
+  final String? detectedMerchant;
 }
 
 class LogPaymentDialog extends StatefulWidget {
@@ -33,6 +38,9 @@ class _LogPaymentDialogState extends State<LogPaymentDialog> {
   final _note = TextEditingController();
   DateTime _paidAt = DateTime.now();
   String? _imagePath;
+  double? _detectedAmount;
+  String? _detectedMerchant;
+  bool _scanning = false;
 
   static const _months = [
     'January',
@@ -59,8 +67,25 @@ class _LogPaymentDialogState extends State<LogPaymentDialog> {
   }
 
   Future<void> _pick(ImageSource source) async {
-    final image = await ImagePicker().pickImage(source: source);
-    if (image != null && mounted) setState(() => _imagePath = image.path);
+    setState(() => _scanning = true);
+    try {
+      final result = await ReceiptScannerService().scan(source);
+      if (result == null || !mounted) return;
+      setState(() {
+        _imagePath = result.imagePath;
+        _detectedAmount = result.draft.price;
+        _detectedMerchant = result.draft.serviceName;
+        if (_detectedAmount != null) {
+          _amount.text = _detectedAmount!.toStringAsFixed(2);
+        }
+        if (result.draft.billingDate != null) {
+          _paidAt = result.draft.billingDate!;
+          _period.text = '${_months[_paidAt.month - 1]} ${_paidAt.year}';
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
   }
 
   Future<void> _chooseSource() async {
@@ -108,7 +133,9 @@ class _LogPaymentDialogState extends State<LogPaymentDialog> {
             paidAt: _paidAt,
             billingPeriod: _period.text.trim(),
             note: _note.text.trim().isEmpty ? null : _note.text.trim(),
-            imagePath: _imagePath!));
+            imagePath: _imagePath!,
+            detectedAmount: _detectedAmount,
+            detectedMerchant: _detectedMerchant));
   }
 
   @override
@@ -174,8 +201,24 @@ class _LogPaymentDialogState extends State<LogPaymentDialog> {
                       ),
                     ),
                   const SizedBox(height: 8),
+                  if (_scanning)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(),
+                    ),
+                  if (!_scanning && _detectedAmount != null)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.document_scanner_outlined),
+                      title: Text(
+                        'OCR detected MYR ${_detectedAmount!.toStringAsFixed(2)}',
+                      ),
+                      subtitle: _detectedMerchant == null
+                          ? null
+                          : Text(_detectedMerchant!),
+                    ),
                   OutlinedButton.icon(
-                    onPressed: _chooseSource,
+                    onPressed: _scanning ? null : _chooseSource,
                     icon: const Icon(Icons.receipt_long),
                     label: Text(_imagePath == null
                         ? 'Add payment receipt'

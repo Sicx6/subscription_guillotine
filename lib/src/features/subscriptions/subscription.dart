@@ -109,6 +109,7 @@ class Subscription {
     this.proofPath,
     this.isEssential = false,
     this.usageLevel = UsageLevel.unknown,
+    this.cancellationLeadDays = 3,
   });
 
   final String id;
@@ -130,8 +131,52 @@ class Subscription {
   final String? proofPath;
   final bool isEssential;
   final UsageLevel usageLevel;
+  final int cancellationLeadDays;
 
   double get monthlyPrice => recurrence.monthlyEquivalent(price);
+
+  Subscription copyWith({
+    String? name,
+    double? price,
+    DateTime? billingDate,
+    Recurrence? recurrence,
+    int? reminderDaysBefore,
+    SubscriptionCategory? category,
+    SubscriptionStatus? status,
+    DateTime? trialEndDate,
+    DateTime? cancellationDate,
+    String? cancellationReference,
+    String? cancellationUrl,
+    String? cancellationNotes,
+    String? receiptPath,
+    String? proofPath,
+    bool? isEssential,
+    UsageLevel? usageLevel,
+    int? cancellationLeadDays,
+  }) =>
+      Subscription(
+        id: id,
+        name: name ?? this.name,
+        price: price ?? this.price,
+        billingDate: billingDate ?? this.billingDate,
+        recurrence: recurrence ?? this.recurrence,
+        reminderDaysBefore: reminderDaysBefore ?? this.reminderDaysBefore,
+        notificationId: notificationId,
+        createdAt: createdAt,
+        category: category ?? this.category,
+        status: status ?? this.status,
+        trialEndDate: trialEndDate ?? this.trialEndDate,
+        cancellationDate: cancellationDate ?? this.cancellationDate,
+        cancellationReference:
+            cancellationReference ?? this.cancellationReference,
+        cancellationUrl: cancellationUrl ?? this.cancellationUrl,
+        cancellationNotes: cancellationNotes ?? this.cancellationNotes,
+        receiptPath: receiptPath ?? this.receiptPath,
+        proofPath: proofPath ?? this.proofPath,
+        isEssential: isEssential ?? this.isEssential,
+        usageLevel: usageLevel ?? this.usageLevel,
+        cancellationLeadDays: cancellationLeadDays ?? this.cancellationLeadDays,
+      );
 
   DateTime nextBillingDate([DateTime? from]) {
     final current = from ?? DateTime.now();
@@ -163,6 +208,8 @@ class Subscription {
         proofPath: map['proof_path'] as String?,
         isEssential: (map['is_essential'] as num?)?.toInt() == 1,
         usageLevel: UsageLevel.fromStorage(map['usage_level']),
+        cancellationLeadDays:
+            (map['cancellation_lead_days'] as num?)?.toInt() ?? 3,
       );
 
   Map<String, Object?> toMap() => {
@@ -185,6 +232,7 @@ class Subscription {
         'proof_path': proofPath,
         'is_essential': isEssential ? 1 : 0,
         'usage_level': usageLevel.name,
+        'cancellation_lead_days': cancellationLeadDays,
       };
 }
 
@@ -200,7 +248,11 @@ class SubscriptionEvent {
       required this.occurredAt,
       this.note,
       this.billingPeriod,
-      this.receiptPath});
+      this.receiptPath,
+      this.auditStatus,
+      this.auditMessage,
+      this.detectedMerchant,
+      this.expectedAmount});
   final int? id;
   final String subscriptionId;
   final String type;
@@ -209,6 +261,10 @@ class SubscriptionEvent {
   final String? note;
   final String? billingPeriod;
   final String? receiptPath;
+  final String? auditStatus;
+  final String? auditMessage;
+  final String? detectedMerchant;
+  final double? expectedAmount;
   factory SubscriptionEvent.fromMap(Map<String, Object?> map) =>
       SubscriptionEvent(
           id: map['id'] as int?,
@@ -218,7 +274,11 @@ class SubscriptionEvent {
           occurredAt: DateTime.parse(map['occurred_at']! as String),
           note: map['note'] as String?,
           billingPeriod: map['billing_period'] as String?,
-          receiptPath: map['receipt_path'] as String?);
+          receiptPath: map['receipt_path'] as String?,
+          auditStatus: map['audit_status'] as String?,
+          auditMessage: map['audit_message'] as String?,
+          detectedMerchant: map['detected_merchant'] as String?,
+          expectedAmount: (map['expected_amount'] as num?)?.toDouble());
   Map<String, Object?> toMap() => {
         'id': id,
         'subscription_id': subscriptionId,
@@ -228,5 +288,9 @@ class SubscriptionEvent {
         'note': note,
         'billing_period': billingPeriod,
         'receipt_path': receiptPath,
+        'audit_status': auditStatus,
+        'audit_message': auditMessage,
+        'detected_merchant': detectedMerchant,
+        'expected_amount': expectedAmount,
       };
 }

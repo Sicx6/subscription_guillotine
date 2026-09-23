@@ -71,6 +71,10 @@ void main() {
       note: 'Paid by card',
       billingPeriod: 'September 2026',
       receiptPath: r'C:\app\attachments\payment_receipts\receipt.jpg',
+      auditStatus: 'review',
+      auditMessage: 'Price changed',
+      detectedMerchant: 'Example merchant',
+      expectedAmount: 49.90,
     );
 
     final restored = SubscriptionEvent.fromMap(event.toMap());
@@ -78,5 +82,22 @@ void main() {
     expect(restored.billingPeriod, 'September 2026');
     expect(restored.receiptPath, event.receiptPath);
     expect(restored.amount, 54.90);
+    expect(restored.auditStatus, 'review');
+    expect(restored.expectedAmount, 49.90);
+  });
+
+  test('cancellation deadline defaults to three days', () {
+    final subscription = Subscription.fromMap({
+      'id': 'legacy',
+      'name': 'Legacy service',
+      'price': 10.0,
+      'billing_date': '2026-09-30T00:00:00.000',
+      'recurrence': 'monthly',
+      'reminder_days_before': 1,
+      'notification_id': 2,
+      'created_at': '2026-01-01T00:00:00.000',
+    });
+
+    expect(subscription.cancellationLeadDays, 3);
   });
 }

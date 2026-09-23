@@ -2,13 +2,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../services/attachment_service.dart';
+import 'cancellation_evidence_dialog.dart';
+import 'charge_guard_service.dart';
 import 'subscription.dart';
-import 'subscription_providers.dart';
 import 'decision_engine.dart';
 import 'log_payment_dialog.dart';
+import 'renewal_check_in_dialog.dart';
+import 'subscription_detail_view_model.dart';
+import 'subscription_providers.dart';
 
 class SubscriptionDetailSheet extends ConsumerStatefulWidget {
   const SubscriptionDetailSheet({super.key, required this.subscription});
@@ -18,37 +20,28 @@ class SubscriptionDetailSheet extends ConsumerStatefulWidget {
 }
 
 class _State extends ConsumerState<SubscriptionDetailSheet> {
-  late Future<List<SubscriptionEvent>> _events;
-  @override
-  void initState() {
-    super.initState();
-    _reload();
-  }
-
-  void _reload() => _events = ref
-      .read(subscriptionRepositoryProvider)
-      .getEvents(widget.subscription.id);
-
   Future<void> _logPayment() async {
     final draft = await showDialog<PaymentDraft>(
         context: context,
         barrierDismissible: false,
         builder: (_) => LogPaymentDialog(subscription: widget.subscription));
     if (draft == null) return;
-    final receiptPath = await AttachmentService.preserve(
-        draft.imagePath, 'payment_${widget.subscription.id}',
-        folderName: 'payment_receipts');
-    await ref.read(subscriptionsProvider.notifier).logPayment(
-        widget.subscription,
-        amount: draft.amount,
-        paidAt: draft.paidAt,
-        billingPeriod: draft.billingPeriod,
-        note: draft.note,
-        receiptPath: receiptPath);
+    final audit = await ref
+        .read(subscriptionDetailProvider(widget.subscription.id).notifier)
+        .logPayment(
+          subscription: widget.subscription,
+          amount: draft.amount,
+          paidAt: draft.paidAt,
+          billingPeriod: draft.billingPeriod,
+          imagePath: draft.imagePath,
+          note: draft.note,
+          detectedAmount: draft.detectedAmount,
+          detectedMerchant: draft.detectedMerchant,
+        );
     if (mounted) {
-      setState(_reload);
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment and receipt saved.')));
+        SnackBar(content: Text(audit.message)),
+      );
     }
   }
 
@@ -69,10 +62,9 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                       child: const Text('Delete'))
                 ]));
     if (confirmed != true) return;
-    final removed =
-        await ref.read(subscriptionRepositoryProvider).deleteEvent(event.id!);
-    await AttachmentService.deleteIfExists(removed?.receiptPath);
-    if (mounted) setState(_reload);
+    await ref
+        .read(subscriptionDetailProvider(widget.subscription.id).notifier)
+        .deleteEvent(event);
   }
 
   Future<void> _openReceipt(String path) async {
@@ -92,38 +84,57 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                 child: Image.file(file, fit: BoxFit.contain))));
   }
 
-  Future<void> _proof() async {
-    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-    final path =
-        await AttachmentService.preserve(image.path, 'cancellation_proof');
-    final s = widget.subscription;
-    await ref.read(subscriptionsProvider.notifier).updateSubscription(
-        subscription: s,
-        name: s.name,
-        price: s.price,
-        billingDate: s.billingDate,
-        recurrence: s.recurrence,
-        reminderDaysBefore: s.reminderDaysBefore,
-        category: s.category,
-        status: s.status,
-        trialEndDate: s.trialEndDate,
-        cancellationDate: s.cancellationDate,
-        cancellationReference: s.cancellationReference,
-        cancellationUrl: s.cancellationUrl,
-        cancellationNotes: s.cancellationNotes,
-        proofPath: path,
-        isEssential: s.isEssential,
-        usageLevel: s.usageLevel);
+  Future<void> _addEvidence() async {
+    final draft = await showDialog<CancellationEvidenceDraft>(
+      context: context,
+      builder: (_) => const CancellationEvidenceDialog(),
+    );
+    if (draft == null) return;
+    await ref
+        .read(subscriptionDetailProvider(widget.subscription.id).notifier)
+        .addCancellationEvidence(
+          imagePath: draft.imagePath,
+          reference: draft.reference,
+          note: draft.note,
+        );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cancellation proof attached.')));
+          const SnackBar(content: Text('Cancellation evidence saved.')));
+    }
+  }
+
+  Future<void> _checkIn() async {
+    final draft = await showDialog<RenewalCheckInDraft>(
+      context: context,
+      builder: (_) => RenewalCheckInDialog(subscription: widget.subscription),
+    );
+    if (draft == null) return;
+    await ref
+        .read(subscriptionDetailProvider(widget.subscription.id).notifier)
+        .recordCheckIn(
+          subscription: widget.subscription,
+          usage: draft.usage,
+          worthPrice: draft.worthPrice,
+          subscribeAgain: draft.subscribeAgain,
+        );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Renewal check-in saved.')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.subscription;
+    final subscriptions = ref.watch(subscriptionsProvider).valueOrNull;
+    final s = subscriptions?.firstWhere(
+          (item) => item.id == widget.subscription.id,
+          orElse: () => widget.subscription,
+        ) ??
+        widget.subscription;
+    final detail = ref.watch(subscriptionDetailProvider(s.id));
+    final deadline =
+        s.nextBillingDate().subtract(Duration(days: s.cancellationLeadDays));
     return DraggableScrollableSheet(
         expand: false,
         initialChildSize: .88,
@@ -169,6 +180,21 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                       ),
                     ),
                   ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.event_busy_outlined),
+                    title: const Text('Cancellation deadline'),
+                    subtitle: Text(
+                      '${_date(deadline)} · ${s.cancellationLeadDays} days before renewal',
+                    ),
+                  ),
+                  detail.maybeWhen(
+                    data: (value) => _PriceCreepCard(
+                      subscription: s,
+                      events: value.events,
+                    ),
+                    orElse: () => const SizedBox.shrink(),
+                  ),
                   if (s.trialEndDate != null)
                     ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -189,6 +215,10 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                         onPressed: _logPayment,
                         icon: const Icon(Icons.payments_outlined),
                         label: const Text('Log payment')),
+                    FilledButton.tonalIcon(
+                        onPressed: _checkIn,
+                        icon: const Icon(Icons.fact_check_outlined),
+                        label: const Text('Renewal check-in')),
                     if ((s.cancellationUrl ?? '').isNotEmpty)
                       FilledButton.tonalIcon(
                           onPressed: () async {
@@ -215,10 +245,45 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                         icon: const Icon(Icons.copy),
                         label: const Text('Copy message')),
                     OutlinedButton.icon(
-                        onPressed: _proof,
+                        onPressed: _addEvidence,
                         icon: const Icon(Icons.attachment),
-                        label: const Text('Attach proof')),
+                        label: const Text('Add cancellation evidence')),
                   ]),
+                  detail.maybeWhen(
+                    data: (value) => value.evidence.isEmpty
+                        ? const SizedBox.shrink()
+                        : Card(
+                            margin: const EdgeInsets.only(top: 16),
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Cancellation evidence vault',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w700),
+                                  ),
+                                  ...value.evidence.map((event) => ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading:
+                                            const Icon(Icons.verified_outlined),
+                                        title: Text(_date(event.occurredAt)),
+                                        subtitle: Text(event.note ??
+                                            'Cancellation confirmation'),
+                                        trailing: const Icon(
+                                            Icons.open_in_full_outlined),
+                                        onTap: event.receiptPath == null
+                                            ? null
+                                            : () => _openReceipt(
+                                                event.receiptPath!),
+                                      )),
+                                ],
+                              ),
+                            ),
+                          ),
+                    orElse: () => const SizedBox.shrink(),
+                  ),
                   if ((s.cancellationNotes ?? '').isNotEmpty) ...[
                     const SizedBox(height: 20),
                     Text('Cancellation notes',
@@ -230,15 +295,13 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                   Text('History',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  FutureBuilder<List<SubscriptionEvent>>(
-                      future: _events,
-                      builder: (_, snapshot) {
-                        final events = snapshot.data ?? const [];
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                              child: CircularProgressIndicator());
-                        }
+                  detail.when(
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
+                      error: (error, _) =>
+                          Text('Could not load history: $error'),
+                      data: (value) {
+                        final events = value.events;
                         if (events.isEmpty) {
                           return const Text('No activity recorded yet.');
                         }
@@ -250,18 +313,58 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                                         : () =>
                                             _openReceipt(event.receiptPath!),
                                     contentPadding: EdgeInsets.zero,
-                                    leading: Icon(event.type == 'payment'
-                                        ? Icons.payments_outlined
-                                        : event.type == 'price_change'
-                                            ? Icons.trending_up
-                                            : Icons.flag_outlined),
+                                    leading: Icon(_eventIcon(event)),
                                     title: Text(event.billingPeriod ??
                                         event.type.replaceAll('_', ' ')),
-                                    subtitle: Text([
-                                      _date(event.occurredAt),
-                                      if ((event.note ?? '').isNotEmpty)
-                                        event.note!,
-                                    ].join(' · ')),
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text([
+                                          _date(event.occurredAt),
+                                          if ((event.note ?? '').isNotEmpty)
+                                            event.note!,
+                                        ].join(' · ')),
+                                        if ((event.auditMessage ?? '')
+                                            .isNotEmpty)
+                                          Text(
+                                            event.auditMessage!,
+                                            style: TextStyle(
+                                              color: _auditColor(
+                                                  context, event.auditStatus),
+                                            ),
+                                          ),
+                                        if (_needsAuditAction(event))
+                                          Wrap(
+                                            spacing: 6,
+                                            children: [
+                                              TextButton(
+                                                onPressed: () => ref
+                                                    .read(
+                                                        subscriptionDetailProvider(
+                                                                s.id)
+                                                            .notifier)
+                                                    .markAuditReviewed(event),
+                                                child: const Text('Reviewed'),
+                                              ),
+                                              if (event.amount != null &&
+                                                  event.amount !=
+                                                      event.expectedAmount)
+                                                TextButton(
+                                                  onPressed: () => ref
+                                                      .read(
+                                                          subscriptionDetailProvider(
+                                                                  s.id)
+                                                              .notifier)
+                                                      .acceptDetectedPrice(
+                                                          s, event),
+                                                  child: const Text(
+                                                      'Use as new price'),
+                                                ),
+                                            ],
+                                          ),
+                                      ],
+                                    ),
                                     trailing: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
@@ -274,7 +377,9 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
                                                     left: 8),
                                                 child: Text(
                                                     'MYR ${event.amount!.toStringAsFixed(2)}')),
-                                          if (event.type == 'payment')
+                                          if (event.type == 'payment' ||
+                                              event.type ==
+                                                  'cancellation_evidence')
                                             IconButton(
                                                 tooltip: 'Delete payment',
                                                 onPressed: () =>
@@ -289,4 +394,93 @@ class _State extends ConsumerState<SubscriptionDetailSheet> {
 
   String _date(DateTime d) => '${d.day.toString().padLeft(2, '0')}/'
       '${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  IconData _eventIcon(SubscriptionEvent event) {
+    switch (event.type) {
+      case 'payment':
+        return Icons.payments_outlined;
+      case 'price_change':
+        return Icons.trending_up;
+      case 'check_in':
+        return Icons.fact_check_outlined;
+      case 'cancellation_evidence':
+        return Icons.verified_outlined;
+      default:
+        return Icons.flag_outlined;
+    }
+  }
+
+  bool _needsAuditAction(SubscriptionEvent event) =>
+      event.type == 'payment' &&
+      event.auditStatus != null &&
+      event.auditStatus != ChargeAuditStatus.matched.name &&
+      event.auditStatus != ChargeAuditStatus.reviewed.name;
+
+  Color? _auditColor(BuildContext context, String? status) {
+    if (status == ChargeAuditStatus.matched.name ||
+        status == ChargeAuditStatus.reviewed.name) {
+      return Colors.green;
+    }
+    if (status == null) return null;
+    return Theme.of(context).colorScheme.error;
+  }
+}
+
+class _PriceCreepCard extends StatelessWidget {
+  const _PriceCreepCard({
+    required this.subscription,
+    required this.events,
+  });
+
+  final Subscription subscription;
+  final List<SubscriptionEvent> events;
+
+  @override
+  Widget build(BuildContext context) {
+    final prices = events
+        .where((event) =>
+            (event.type == 'payment' || event.type == 'price_change') &&
+            event.amount != null)
+        .toList()
+      ..sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
+    if (prices.length < 2) return const SizedBox.shrink();
+
+    final first = prices.first.amount!;
+    final latest = prices.last.amount!;
+    final increase = latest - first;
+    final annualImpact = increase * 12;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Price-creep timeline',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            ...prices.take(6).map((event) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(event.billingPeriod ??
+                            '${event.occurredAt.month}/${event.occurredAt.year}'),
+                      ),
+                      Text('MYR ${event.amount!.toStringAsFixed(2)}'),
+                    ],
+                  ),
+                )),
+            if (increase.abs() >= .01) ...[
+              const Divider(),
+              Text(
+                '${increase > 0 ? 'Increase' : 'Decrease'}: MYR ${increase.abs().toStringAsFixed(2)} · ${increase > 0 ? '+' : '-'}MYR ${annualImpact.abs().toStringAsFixed(2)} per year',
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
