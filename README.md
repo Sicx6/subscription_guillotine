@@ -9,26 +9,49 @@ and explainable recommendations without requiring an account or cloud service.
 
 ## Screenshots
 
+### Light and dark themes
+
 <table>
   <tr>
-    <td align="center"><strong>Dashboard</strong></td>
-    <td align="center"><strong>Insights</strong></td>
-    <td align="center"><strong>Subscription details</strong></td>
+    <td align="center"><strong>Dashboard · Dark</strong></td>
+    <td align="center"><strong>Dashboard · Light</strong></td>
   </tr>
   <tr>
-    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-38-37-749_com.example.subscription_guillotine.jpg" width="260" alt="Subscription Guillotine dashboard"></td>
-    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-38-42-548_com.example.subscription_guillotine.jpg" width="260" alt="Subscription spending insights"></td>
-    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-39-28-802_com.example.subscription_guillotine.jpg" width="260" alt="Subscription details with cancellation deadline and price timeline"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-38-37-749_com.example.subscription_guillotine.jpg" width="320" alt="Subscription dashboard in dark theme"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-40-15-484_com.example.subscription_guillotine.jpg" width="320" alt="Subscription dashboard in light theme"></td>
   </tr>
   <tr>
+    <td align="center"><strong>Insights · Dark</strong></td>
+    <td align="center"><strong>Insights · Light</strong></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-38-42-548_com.example.subscription_guillotine.jpg" width="320" alt="Subscription insights in dark theme"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-40-42-880_com.example.subscription_guillotine.jpg" width="320" alt="Subscription insights in light theme"></td>
+  </tr>
+</table>
+
+### Feature tour
+
+<table>
+  <tr>
+    <td align="center"><strong>Subscription intelligence</strong></td>
+    <td align="center"><strong>Cancellation deadlines</strong></td>
     <td align="center"><strong>Receipt scanning</strong></td>
+  </tr>
+  <tr>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-40-26-491_com.example.subscription_guillotine.jpg" width="260" alt="Subscription details with cost projection and price timeline"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-40-38-426_com.example.subscription_guillotine.jpg" width="260" alt="Cancellation deadline and renewal reminders"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-39-08-071_com.example.subscription_guillotine.jpg" width="260" alt="On-device receipt scanner"></td>
+  </tr>
+  <tr>
     <td align="center"><strong>Payment logging</strong></td>
     <td align="center"><strong>Guillotine Mode</strong></td>
+    <td align="center"><strong>What-if savings</strong></td>
   </tr>
   <tr>
-    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-39-08-071_com.example.subscription_guillotine.jpg" width="260" alt="On-device receipt scanner"></td>
     <td><img src="assets/screenshot/Screenshot_2026-09-23-11-39-32-613_com.example.subscription_guillotine.jpg" width="260" alt="Monthly payment logging dialog"></td>
     <td><img src="assets/screenshot/Screenshot_2026-09-23-11-38-54-041_com.example.subscription_guillotine.jpg" width="260" alt="Guillotine Mode subscription decision screen"></td>
+    <td><img src="assets/screenshot/Screenshot_2026-09-23-11-40-44-290_com.example.subscription_guillotine.jpg" width="260" alt="What-if subscription savings simulator"></td>
   </tr>
 </table>
 
